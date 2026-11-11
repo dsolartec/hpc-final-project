@@ -27,6 +27,14 @@ TODO: Hacer guía para paralelo CPU
 poetry run python main.py numpy
 ```
 
+### Argumentos opcionales
+
+| Argumento | Descripción | Valores aceptados | Valor por defecto |
+|---|---|---|---|
+| `region` | Región a utilizar en el model | `Amazonia`, `Andina`, `Caribe`, `Orinoquia` o `Pacifico` | Pacifico |
+
+> **Modo de uso:** `poetry run main.py numpy --region andina`
+
 ## Ejecución con CuPy
 
 TODO: Hacer guía para CuPy
