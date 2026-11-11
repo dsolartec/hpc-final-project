@@ -1,0 +1,20 @@
+[project]
+name = "hpc-final-project-python"
+version = "0.1.0"
+description = "High-Performance Computing final project"
+authors = [
+    {name = "Your Name",email = "you@example.com"}
+]
+license = "MIT"
+package-mode = false
+requires-python = ">=3.14"
+dependencies = [
+    "pandas (>=3.1.1,<4.0.0)",
+    "numpy (>=2.5.4,<3.0.0)",
+    "fastparquet (>=2026.9.0,<2027.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
