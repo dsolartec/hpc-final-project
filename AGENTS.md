@@ -92,7 +92,7 @@ Para cada celda $(i, j)$ y cepa $s$:
 ### 5.1. Discretización temporal sub-mensual (`AC_STEPS_PER_MONTH`)
 Los datasets climáticos tienen resolución mensual ($D_{\text{mes}} \in \{28, 29, 30, 31\}$ días). Para capturar la dinámica intrames sin incurrir en el costo de 30 iteraciones diarias por mes, cada mes se divide en `AC_STEPS_PER_MONTH = 4` sub-pasos (aproximadamente semanales):
 
-$$\Delta t = \frac{D_{\text{mes}}}{\text{AC\_STEPS\_PER\_MONTH}} \approx 7.5\text{ días}$$
+$$\Delta t = \frac{D_{\text{mes}}}{4} \approx 7.5\text{ días}$$
 
 Todas las tasas diarias se escalan rigurosamente por $\Delta t$ dentro de [`ac_step_strain_day`](python/adapters/utils_npcp.py#L148-L236).
 
@@ -111,14 +111,14 @@ En cada mes se extraen la temperatura media $T$ (`temperatura_media_Celsius`), l
    $$\Phi_s(T, H, P) = f_s(T) \cdot g(H) \cdot h(P)$$
 
 ### 5.3. Exposición Efectiva con Acoplamiento Vecinal
-Con el parámetro de acoplamiento espacial $\alpha = \text{AC\_NEIGHBOR\_COUPLING} = 0.25$, una celda $(i, j)$ recibe el $75\%$ de la presión infecciosa de su propia celda y el $25\%$ del promedio de sus 8 vecinos de Moore, normalizado por la población humana de la celda ($N_H = 1\,000$):
+Con el parámetro de acoplamiento espacial $\alpha = 0.25$ (`AC_NEIGHBOR_COUPLING`), una celda $(i, j)$ recibe el $75\%$ de la presión infecciosa de su propia celda y el $25\%$ del promedio de sus 8 vecinos de Moore, normalizado por la población humana de la celda ($N_H = 1\,000$):
 
 $$I_{m,\text{eff}}(i,j) = \frac{(1 - \alpha)\,I_m(i,j) + \alpha\,\overline{I_m}_{\text{vecinos}}(i,j)}{N_H}$$
 
 $$I_{h,\text{eff}}(i,j) = \frac{(1 - \alpha)\,I_h(i,j) + \alpha\,\overline{I_h}_{\text{vecinos}}(i,j)}{N_H}$$
 
 ### 5.4. Reglas de Transición para la Población Humana ($S_h \to I_h \to R_h \to S_h$)
-Sea $a = \text{AC\_BITING\_RATE} = 0.30\text{ días}^{-1}$ la tasa diaria de picadura y $b_s$ la probabilidad de transmisión mosquito $\to$ humano:
+Sea $a = 0.30\text{ días}^{-1}$ (`AC_BITING_RATE`) la tasa diaria de picadura y $b_s$ la probabilidad de transmisión mosquito $\to$ humano:
 
 1. **Tasa efectiva de contacto infeccioso vector $\to$ humano:**
    $$r_{m \to h, s} = \text{clip}(a \cdot b_s,\; 0,\; 1)$$
@@ -145,7 +145,7 @@ Sea $a = \text{AC\_BITING\_RATE} = 0.30\text{ días}^{-1}$ la tasa diaria de pic
 2. **Emergencia climática y dispersión vecinal sobre espacios vacíos:**
    $$\text{Slots}_{\text{vacíos}}(i,j) = \max\Big(0,\; K_M - \big(S_m^{\text{surv}}(i,j) + I_m^{\text{surv}}(i,j)\big)\Big)$$
    $$p_{\text{nac}, m}(i,j) = \text{clip}\left(\left[\beta_{\text{clima}}\,\Phi_s(T,H,P) + \beta_{\text{vecinos}}\,\frac{\overline{M_{\text{vivos}}}_{\text{vecinos}}(i,j)}{K_M}\right]\Delta t,\; 0,\; 1\right)$$
-   donde $\beta_{\text{clima}} = \text{AC\_MOSQUITO\_WEATHER\_DENSITY} = 0.12$ y $\beta_{\text{vecinos}} = \text{AC\_MOSQUITO\_NEIGHBORS\_DENSITY} = 0.04$. Los nuevos mosquitos emergen como susceptibles:
+   donde $\beta_{\text{clima}} = 0.12$ (`AC_MOSQUITO_WEATHER_DENSITY`) y $\beta_{\text{vecinos}} = 0.04$ (`AC_MOSQUITO_NEIGHBORS_DENSITY`). Los nuevos mosquitos emergen como susceptibles:
    $$\Delta S_m^{\text{nac}} \sim \text{Binomial}(\text{Slots}_{\text{vacíos}},\; p_{\text{nac}, m})$$
 3. **Infección del vector ($S_m \to I_m$) al picar humanos infectados:**
    Modulada tanto por la infectividad humano $\to$ mosquito ($c_s$) como por la viabilidad térmica de esporogonia $f_s(T)$:
@@ -259,7 +259,7 @@ El archivo CSV consta de 18 columnas registradas a lo largo de las 204 fechas me
 | `falciparum_S_m` | `int` | Suma de mosquitos susceptibles ($S_m$) en toda la cuadrícula para *P. falciparum*. |
 | `falciparum_I_m` | `int` | Suma de mosquitos infectantes ($I_m$) en toda la cuadrícula para *P. falciparum*. |
 | `falciparum_nuevos_casos_mes` | `int` | Nuevos casos humanos acumulados en los 4 sub-pasos del mes ($\sum \Delta I_{h,f}^{\text{nuevo}}$). |
-| `IPA_falciparum_simulado` | `float` | Incidencia mensual simulada por cada 1.000 habitantes ($\text{falciparum\_nuevos\_casos\_mes} / L^2$). |
+| `IPA_falciparum_simulado` | `float` | Incidencia mensual simulada por cada 1.000 habitantes (`falciparum_nuevos_casos_mes` / $L^2$). |
 | `IPA_falciparum_real` | `float` | Incidencia mensual real observada reportada en el dataset INS. |
 | `vivax_S_h` | `int` | Suma de humanos susceptibles ($S_h$) en toda la cuadrícula para *P. vivax*. |
 | `vivax_I_h` | `int` | Suma de humanos infectados ($I_h$) en toda la cuadrícula para *P. vivax*. |
@@ -267,7 +267,7 @@ El archivo CSV consta de 18 columnas registradas a lo largo de las 204 fechas me
 | `vivax_S_m` | `int` | Suma de mosquitos susceptibles ($S_m$) en toda la cuadrícula para *P. vivax*. |
 | `vivax_I_m` | `int` | Suma de mosquitos infectantes ($I_m$) en toda la cuadrícula para *P. vivax*. |
 | `vivax_nuevos_casos_mes` | `int` | Nuevos casos acumulados en el mes ($\sum \Delta I_{h,v}^{\text{nuevo}} + \sum \Delta I_{h,v}^{\text{recaída}}$). |
-| `IPA_vivax_simulado` | `float` | Incidencia mensual simulada por cada 1.000 habitantes ($\text{vivax\_nuevos\_casos\_mes} / L^2$). |
+| `IPA_vivax_simulado` | `float` | Incidencia mensual simulada por cada 1.000 habitantes (`vivax_nuevos_casos_mes` / $L^2$). |
 | `IPA_vivax_real` | `float` | Incidencia mensual real observada reportada en el dataset INS. |
 
 ### 9.2. Criterios de Aceptación para Validación Estadística
@@ -275,14 +275,17 @@ El archivo CSV consta de 18 columnas registradas a lo largo de las 204 fechas me
 Para certificar que una implementación paralela o en otro lenguaje es equivalente al modelo de referencia, se deben evaluar los siguientes tres criterios sobre estos CSV:
 
 1. **Invariante de Conservación Demográfica:**
-   En cada fila mensual $t$, debe cumplirse estrictamente:
-   $$(\text{falciparum\_S\_h} + \text{falciparum\_I\_h} + \text{falciparum\_R\_h}) = L^2 \times 1\,000$$
-   $$(\text{vivax\_S\_h} + \text{vivax\_I\_h} + \text{vivax\_R\_h}) = L^2 \times 1\,000$$
+   En cada fila mensual $t$, debe cumplirse estrictamente la conservación de la población humana total en la grilla:
+   $$(S_{h,f} + I_{h,f} + R_{h,f}) = L^2 \times 1\,000$$
+   $$(S_{h,v} + I_{h,v} + R_{h,v}) = L^2 \times 1\,000$$
+   Es decir, a nivel de columnas del CSV:
+   - `falciparum_S_h + falciparum_I_h + falciparum_R_h == L^2 * 1000`
+   - `vivax_S_h + vivax_I_h + vivax_R_h == L^2 * 1000`
 2. **Superposición de Curvas Medias en Bandas de Confianza (Sección 5.7):**
    Al promediar $N$ réplicas independientes de una implementación, la trayectoria de su curva media mensual de `IPA_simulado` debe situarse dentro de las bandas de confianza (o $\mu \pm 2\sigma$) obtenidas por el paradigma de referencia.
 3. **Coincidencia del Tamaño Final Medio dentro del Error Estándar:**
-   El tamaño epidémico acumulado final $C_{\text{final}} = \sum_{t=1}^{204} \text{nuevos\_casos\_mes}(t)$ promedio entre réplicas debe coincidir entre implementaciones dentro del error estándar combinado:
-   $$|\bar{C}_{\text{impl\_A}} - \bar{C}_{\text{impl\_B}}| \le 2 \cdot \sqrt{\text{SE}_A^2 + \text{SE}_B^2}, \quad \text{con } \text{SE} = \frac{\sigma}{\sqrt{N}}$$
+   El tamaño epidémico acumulado final $C_{\text{final}} = \sum_{t=1}^{204} \text{Casos}_{\text{mes}}(t)$ (sumando la columna `nuevos_casos_mes` de cada cepa) promedio entre réplicas debe coincidir entre implementaciones dentro del error estándar combinado:
+   $$|\bar{C}_A - \bar{C}_B| \le 2 \cdot \sqrt{\text{SE}_A^2 + \text{SE}_B^2}, \quad \text{con } \text{SE} = \frac{\sigma}{\sqrt{N}}$$
 
 ### 9.3. Reglas de Medición y Persistencia
 - **Exclusión del tiempo de simulación:** La escritura de los archivos en `outputs/metrics/` debe realizarse **después** de detener el cronómetro de `elapsed_time` reportado en `outputs/times.csv`.
