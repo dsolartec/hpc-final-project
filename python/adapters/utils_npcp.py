@@ -1,10 +1,11 @@
-from domain.constants import AC_BITING_RATE, AC_CELL_POPULATION, AC_MAX_MOSQUITOES_PER_CELL, AC_MOSQUITO_MAX_AGE_DAYS, AC_MOSQUITO_WEATHER_DENSITY, \
-    AC_NEIGHBOR_COUPLING, AC_MOSQUITO_NEIGHBORS_DENSITY, AC_STEPS_PER_MONTH, AC_STRAIN_PARAMS
-from domain.enums import MalariaType
 import math
 import numpy as np
 import pandas as pd
 from typing import Any
+
+from domain.constants import AC_BITING_RATE, AC_CELL_POPULATION, AC_MAX_MOSQUITOES_PER_CELL, AC_MOSQUITO_MAX_AGE_DAYS, AC_MOSQUITO_WEATHER_DENSITY, \
+    AC_NEIGHBOR_COUPLING, AC_MOSQUITO_NEIGHBORS_DENSITY, AC_STEPS_PER_MONTH, AC_STRAIN_PARAMS
+from domain.enums import MalariaType
 
 
 def ac_generate_initial_boards(

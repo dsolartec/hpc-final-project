@@ -2,9 +2,10 @@ import argparse
 import logging
 import numpy as np
 import pandas as pd
+import time
 from typing import Any, Optional
 
-from adapters.utils_npcp import ac_generate_initial_boards
+from adapters.utils_npcp import ac_apply_evolution_rules, ac_generate_initial_boards
 
 
 # Configuración básica para mostrar mensajes en consola
@@ -38,15 +39,22 @@ def _initialize_npcp(xp: Any, selected_region: Optional[str]):
         }
 
     for region, data in ac_data_store_by_regions.items():
-        logger.debug("[CELDAS] {0} celdas a analizar para la región {1}".format(
+        logger.info("[CELDAS] {0} celdas a analizar para la región {1}".format(
             (data["board_size"] ** 2) * 10 * 204,
             region,
         ))
 
+    for region, data in ac_data_store_by_regions.items():
+        start = time.perf_counter()
+        ac_apply_evolution_rules(xp, data["df"], data)
+        elapsed = time.perf_counter() - start
+
+        logger.info(f"[TIEMPO] Tiempo de ejecución para {region}: {elapsed} s")
+
 
 def handle_numpy(args: argparse.Namespace):
     logger.debug("=== Código ejecutándose con NumPy ===")
-    _initialize_npcp(np, args.region)
+    _initialize_npcp(np, args.region if args.region.lower() != "todo" else None)
 
 
 def handle_cupy(args: argparse.Namespace):
@@ -59,7 +67,7 @@ def handle_cupy(args: argparse.Namespace):
             raise Exception
 
         logger.debug("=== Código ejecutándose con CuPy ===")
-        _initialize_npcp(cp, args.region)
+        _initialize_npcp(cp, args.region if args.region.lower() != "todo" else None)
     except Exception:
         logger.error("CuPy no está instalado o no hay GPUs disponibles")
 
@@ -86,7 +94,7 @@ def main():
     )
     parser_numpy.add_argument(
         "--region",
-        choices=["amazonia", "andina", "caribe", "orinoquia", "pacifico"],
+        choices=["amazonia", "andina", "caribe", "orinoquia", "pacifico", "todo"],
         default="Pacifico",
         help="Región seleccionada para ejecutar el modelo, por defecto: Pacifico",
         required=False,
@@ -101,7 +109,7 @@ def main():
     )
     parser_cupy.add_argument(
         "--region",
-        choices=["amazonia", "andina", "caribe", "orinoquia", "pacifico"],
+        choices=["amazonia", "andina", "caribe", "orinoquia", "pacifico", "todo"],
         default="Pacifico",
         help="Región seleccionada para ejecutar el modelo, por defecto: Pacifico",
         required=False,

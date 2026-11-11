@@ -31,7 +31,7 @@ poetry run python main.py numpy
 
 | Argumento | Descripción | Valores aceptados | Valor por defecto |
 |---|---|---|---|
-| `region` | Región a utilizar en el model | `Amazonia`, `Andina`, `Caribe`, `Orinoquia` o `Pacifico` | Pacifico |
+| `region` | Región a utilizar en el model | `Amazonia`, `Andina`, `Caribe`, `Orinoquia`, `Pacifico` o `todo` | Pacifico |
 
 > **Modo de uso:** `poetry run main.py numpy --region andina`
 
