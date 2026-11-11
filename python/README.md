@@ -23,6 +23,9 @@ poetry run python main.py pure
 | Argumento | Descripción | Valores aceptados | Valor por defecto |
 |---|---|---|---|
 | `region` | Región a utilizar en el model | `Amazonia`, `Andina`, `Caribe`, `Orinoquia`, `Pacifico` o `todo` | Pacifico |
+| `disable-animation` | Desactivar la generación de la animación HTML | N/A | N/A |
+
+> **Modo de uso:** `poetry run main.py pure --disable-animation`
 
 ### Resultados generados
 
@@ -49,6 +52,7 @@ poetry run python main.py numpy
 | Argumento | Descripción | Valores aceptados | Valor por defecto |
 |---|---|---|---|
 | `region` | Región a utilizar en el model | `Amazonia`, `Andina`, `Caribe`, `Orinoquia`, `Pacifico` o `todo` | Pacifico |
+| `disable-animation` | Desactivar la generación de la animación HTML | N/A | N/A |
 
 > **Modo de uso:** `poetry run main.py numpy --region andina`
 

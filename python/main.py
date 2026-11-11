@@ -83,11 +83,12 @@ def handle_pure(args: argparse.Namespace):
             metrics_df.insert(0, "paradigm", "pure")
             metrics_df.to_csv(metrics_dir / f"pure_{region.lower()}.csv", index=False)
 
-        with open(f"../outputs/animations/pure_{region.lower()}.html", "w+") as file:
-            file.write(ac_animate_boards(region, data))
+        if not args.disable_animation:
+            with open(f"../outputs/animations/pure_{region.lower()}.html", "w+") as file:
+                file.write(ac_animate_boards(region, data))
 
 
-def _initialize_npcp(xp: Any, selected_region: Optional[str]):
+def _initialize_npcp(xp: Any, selected_region: Optional[str], disable_animation: bool):
     ac_data_store_by_regions = {}
     for region, new_df in df_by_regions.groupby("region"):
         if selected_region is not None and region.lower() != selected_region.lower():
@@ -134,13 +135,14 @@ def _initialize_npcp(xp: Any, selected_region: Optional[str]):
             metrics_df.insert(0, "paradigm", paradigm_name)
             metrics_df.to_csv(metrics_dir / f"{paradigm_name}_{region.lower()}.csv", index=False)
 
-        with open(f"../outputs/animations/{paradigm_name}_{region.lower()}.html", "w+") as file:
-            file.write(ac_animate_boards(region, data))
+        if not disable_animation:
+            with open(f"../outputs/animations/{paradigm_name}_{region.lower()}.html", "w+") as file:
+                file.write(ac_animate_boards(region, data))
 
 
 def handle_numpy(args: argparse.Namespace):
     logger.debug("=== Código ejecutándose con NumPy ===")
-    _initialize_npcp(np, args.region if args.region.lower() != "todo" else None)
+    _initialize_npcp(np, args.region if args.region.lower() != "todo" else None, args.disable_animation)
 
 
 def handle_cupy(args: argparse.Namespace):
@@ -153,7 +155,7 @@ def handle_cupy(args: argparse.Namespace):
             raise Exception
 
         logger.debug("=== Código ejecutándose con CuPy ===")
-        _initialize_npcp(cp, args.region if args.region.lower() != "todo" else None)
+        _initialize_npcp(cp, args.region if args.region.lower() != "todo" else None, args.disable_animation)
     except Exception:
         logger.error("CuPy no está instalado o no hay GPUs disponibles")
 
@@ -187,6 +189,12 @@ def main():
         name="pure",
     )
     parser_pure.add_argument(
+        "--disable-animation",
+        action=argparse.BooleanOptionalAction,
+        help="No generar animación HTML",
+        required=False,
+    )
+    parser_pure.add_argument(
         "--region",
         choices=["amazonia", "andina", "caribe", "orinoquia", "pacifico", "todo"],
         default="Pacifico",
@@ -202,6 +210,12 @@ def main():
         name="numpy",
     )
     parser_numpy.add_argument(
+        "--disable-animation",
+        action=argparse.BooleanOptionalAction,
+        help="No generar animación HTML",
+        required=False,
+    )
+    parser_numpy.add_argument(
         "--region",
         choices=["amazonia", "andina", "caribe", "orinoquia", "pacifico", "todo"],
         default="Pacifico",
@@ -215,6 +229,12 @@ def main():
     parser_cupy = subparsers.add_parser(
         help="Ejecutar código con CuPy",
         name="cupy",
+    )
+    parser_cupy.add_argument(
+        "--disable-animation",
+        action=argparse.BooleanOptionalAction,
+        help="No generar animación HTML",
+        required=False,
     )
     parser_cupy.add_argument(
         "--region",
