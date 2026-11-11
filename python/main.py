@@ -2,7 +2,7 @@ import argparse
 import logging
 import numpy as np
 import pandas as pd
-from typing import Any
+from typing import Any, Optional
 
 from adapters.utils_npcp import ac_generate_initial_boards
 
@@ -10,21 +10,15 @@ from adapters.utils_npcp import ac_generate_initial_boards
 # Configuración básica para mostrar mensajes en consola
 logging.basicConfig(
     level=logging.DEBUG,
-    format='[%(asctime)s] [%(levelname)s] %(message)s'
+    format='[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s'
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("main")
 
 # Datasets
 
 df_by_regions = pd.read_parquet("../data/GAM_regional_enriquecido.parquet")
 logger.debug(f"[DF] Tamaño del DataFrame (Por regiones): {len(df_by_regions)} datos")
-
-df_by_departments = pd.read_parquet("../data/GAM_departamental_enriquecido.parquet")
-logger.debug(f"[DF] Tamaño del DataFrame (Por departamentos): {len(df_by_departments)} datos")
-
-df_by_cities = pd.read_parquet("../data/GAM_municipal_enriquecido.parquet")
-logger.debug(f"[DF] Tamaño del DataFrame (Por municipios): {len(df_by_cities)} datos")
 
 # Handlers
 
@@ -32,47 +26,27 @@ def handle_pure(args: argparse.Namespace):
     logger.debug("=== Código ejecutándose en Python puro secuencial ===")
 
 
-def _initialize_npcp(xp: Any):
+def _initialize_npcp(xp: Any, selected_region: Optional[str]):
     ac_data_store_by_regions = {}
     for region, new_df in df_by_regions.groupby("region"):
+        if selected_region is not None and region.lower() != selected_region.lower():
+            continue
+
         ac_data_store_by_regions[region] = {
             "df": new_df,
             **ac_generate_initial_boards(xp, new_df),
         }
 
-    logger.debug("[CELDAS] {0} celdas a analizar para {1} regiones".format(
-        sum((value["board_size"] ** 2) * 10 for value in ac_data_store_by_regions.values()),
-        len(ac_data_store_by_regions.keys()),
-    ))
-
-    ac_data_store_by_departments = {}
-    for department, new_df in df_by_departments.groupby("departamento"):
-        ac_data_store_by_departments[department] = {
-            "df": new_df,
-            **ac_generate_initial_boards(xp, new_df),
-        }
-
-    logger.debug("[CELDAS] {0} celdas a analizar para {1} departamentos".format(
-        sum((value["board_size"] ** 2) * 10 for value in ac_data_store_by_departments.values()),
-        len(ac_data_store_by_departments.keys()),
-    ))
-
-    ac_data_store_by_cities = {}
-    for city, new_df in df_by_cities.groupby("municipio"):
-        ac_data_store_by_cities[city] = {
-            "df": new_df,
-            **ac_generate_initial_boards(xp, new_df),
-        }
-
-    logger.debug("[CELDAS] {0} celdas a analizar para {1} municipios".format(
-        sum((value["board_size"] ** 2) * 10 for value in ac_data_store_by_cities.values()),
-        len(ac_data_store_by_cities.keys()),
-    ))
+    for region, data in ac_data_store_by_regions.items():
+        logger.debug("[CELDAS] {0} celdas a analizar para la región {1}".format(
+            (data["board_size"] ** 2) * 10 * 204,
+            region,
+        ))
 
 
 def handle_numpy(args: argparse.Namespace):
     logger.debug("=== Código ejecutándose con NumPy ===")
-    _initialize_npcp(np)
+    _initialize_npcp(np, args.region)
 
 
 def handle_cupy(args: argparse.Namespace):
@@ -85,7 +59,7 @@ def handle_cupy(args: argparse.Namespace):
             raise Exception
 
         logger.debug("=== Código ejecutándose con CuPy ===")
-        _initialize_npcp(cp)
+        _initialize_npcp(cp, args.region)
     except Exception:
         logger.error("CuPy no está instalado o no hay GPUs disponibles")
 
@@ -110,12 +84,28 @@ def main():
         help="Ejecutar código con NumPy",
         name="numpy",
     )
+    parser_numpy.add_argument(
+        "--region",
+        choices=["amazonia", "andina", "caribe", "orinoquia", "pacifico"],
+        default="Pacifico",
+        help="Región seleccionada para ejecutar el modelo, por defecto: Pacifico",
+        required=False,
+        type=str,
+    )
     parser_numpy.set_defaults(func=handle_numpy)
 
     # Subcommand: CuPy
     parser_cupy = subparsers.add_parser(
         help="Ejecutar código con CuPy",
         name="cupy",
+    )
+    parser_cupy.add_argument(
+        "--region",
+        choices=["amazonia", "andina", "caribe", "orinoquia", "pacifico"],
+        default="Pacifico",
+        help="Región seleccionada para ejecutar el modelo, por defecto: Pacifico",
+        required=False,
+        type=str,
     )
     parser_cupy.set_defaults(func=handle_cupy)
 
