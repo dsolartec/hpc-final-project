@@ -18,6 +18,14 @@ Para ejecutar el modelo SIR que usa código puro en Python (Secuencial), utiliza
 poetry run python main.py pure
 ```
 
+### Argumentos opcionales
+
+| Argumento | Descripción | Valores aceptados | Valor por defecto |
+|---|---|---|---|
+| `region` | Región a utilizar en el model | `Amazonia`, `Andina`, `Caribe`, `Orinoquia`, `Pacifico` o `todo` | Pacifico |
+
+> **Modo de uso:** `poetry run main.py pure --region andina`
+
 ## Ejecución paralelo CPU
 
 TODO: Elegir multiprocessing, joblib o Dask <br>

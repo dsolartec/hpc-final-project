@@ -11,6 +11,10 @@ from typing import Any, Optional
 
 from adapters.utils_animations import ac_animate_boards
 from adapters.utils_npcp import ac_apply_evolution_rules, ac_generate_initial_boards
+from adapters.utils_pure import (
+    ac_apply_evolution_rules as pure_apply_evolution_rules,
+    ac_generate_initial_boards as pure_generate_initial_boards,
+)
 
 
 # Increase the limit to 60 MB
@@ -31,8 +35,51 @@ logger.debug(f"[DF] Tamaño del DataFrame (Por regiones): {len(df_by_regions)} d
 
 # Handlers
 
+def _initialize_pure(selected_region: Optional[str]):
+    ac_data_store_by_regions = {}
+    for region, new_df in df_by_regions.groupby("region"):
+        if selected_region is not None and region.lower() != selected_region.lower():
+            continue
+
+        ac_data_store_by_regions[region] = {
+            "df": new_df,
+            **pure_generate_initial_boards(new_df),
+        }
+
+    for region, data in ac_data_store_by_regions.items():
+        logger.info("[CELDAS] {0} celdas a analizar para la región {1}".format(
+            (data["board_size"] ** 2) * 10 * 204,
+            region,
+        ))
+
+    for region, data in ac_data_store_by_regions.items():
+        start = time.perf_counter()
+        pure_apply_evolution_rules(data["df"], data)
+        elapsed = time.perf_counter() - start
+
+        with open(f"../outputs/times.csv", "a") as times_csv_file:
+            csv_writer = csv.writer(times_csv_file)
+            csv_writer.writerow([
+                time.time(), # execution_timestamp
+                "python", # language
+                "pure", # paradigm
+                region.lower(), # region
+                1, # workers
+                data["board_size"], # board_size
+                204, # iterations
+                elapsed, # elapsed_time
+            ])
+
+        logger.info(f"[TIEMPO] Tiempo de ejecución para {region}: {elapsed:.2f} s")
+
+        with open(f"../outputs/animations/pure_{region.lower()}.html", "w+") as file:
+            file.write(ac_animate_boards(region, data))
+
+
 def handle_pure(args: argparse.Namespace):
     logger.debug("=== Código ejecutándose en Python puro secuencial ===")
+    region_arg = getattr(args, "region", "Pacifico")
+    _initialize_pure(region_arg if region_arg.lower() != "todo" else None)
 
 
 def _initialize_npcp(xp: Any, selected_region: Optional[str]):
@@ -123,6 +170,14 @@ def main():
     parser_pure = subparsers.add_parser(
         help="Ejecutar código puro (Secuencial)",
         name="pure",
+    )
+    parser_pure.add_argument(
+        "--region",
+        choices=["amazonia", "andina", "caribe", "orinoquia", "pacifico", "todo"],
+        default="Pacifico",
+        help="Región seleccionada para ejecutar el modelo, por defecto: Pacifico",
+        required=False,
+        type=str,
     )
     parser_pure.set_defaults(func=handle_pure)
 
