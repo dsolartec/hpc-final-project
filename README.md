@@ -35,3 +35,24 @@ Toda la ejecución del programa para Python está en el [README.md](./python/REA
 ## C++
 
 TODO: Hacer la parte de C++
+
+## Formato de los resultados (Carpeta `outputs`)
+
+### Archivo de tiempos de ejecución (`times.csv`)
+
+En este archivo se encontrarán todas las ejecuciones que se realicen utilizando el proyecto, este cuenta con las siguientes columnas:
+
+| Columna | Descripción |
+|---|---|
+| execution_timestamp | Timestamp del momento de ejecución del comando |
+| type | Tipo de ejecución (`{python,cpp}_{librería}_{región}`) |
+| workers | Cantidad de núcleos |
+| board_size | Tamaño de las columnas del tablero, es decir, si el valor es 30, el tablero es de tamaño 30x30 |
+| iterations | Cantidad de iteraciones (Meses transcurridos) del modelo SIR |
+| elapsed_time | Tiempo de ejecución en segundos |
+
+### Animaciones
+
+Se guardará cada animación resultante en formato HTML para poder visualizarla con botones interactivos, esta se hará en base a los resultados de cada ejecución.
+
+> **NOTA:** Solo se guardará una animación por librería y región.

@@ -12,6 +12,8 @@ poetry install
 
 ## Ejecución secuencial
 
+Para ejecutar el modelo SIR que usa código puro en Python (Secuencial), utiliza el siguiente comando:
+
 ```bash
 poetry run python main.py pure
 ```
@@ -22,6 +24,8 @@ TODO: Elegir multiprocessing, joblib o Dask <br>
 TODO: Hacer guía para paralelo CPU
 
 ## Ejecución con NumPy
+
+Para ejecutar el modelo SIR que usa la librería de NumPy, utiliza el siguiente comando:
 
 ```bash
 poetry run python main.py numpy
