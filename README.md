@@ -40,16 +40,18 @@ TODO: Hacer la parte de C++
 
 ### Archivo de tiempos de ejecución (`times.csv`)
 
-En este archivo se encontrarán todas las ejecuciones que se realicen utilizando el proyecto, este cuenta con las siguientes columnas:
+En este archivo se consolidarán todas las ejecuciones que se realicen utilizando el proyecto (tanto en Python como en C++ y sus variantes paralelas), siguiendo este esquema:
 
 | Columna | Descripción |
 |---|---|
-| execution_timestamp | Timestamp del momento de ejecución del comando |
-| type | Tipo de ejecución (`{python,cpp}_{librería}_{región}`) |
-| workers | Cantidad de núcleos |
-| board_size | Tamaño de las columnas del tablero, es decir, si el valor es 30, el tablero es de tamaño 30x30 |
-| iterations | Cantidad de iteraciones (Meses transcurridos) del modelo SIR |
-| elapsed_time | Tiempo de ejecución en segundos |
+| execution_timestamp | Timestamp UNIX del momento en que finaliza la simulación |
+| language | Lenguaje de programación empleado (`python`, `cpp`) |
+| paradigm | Paradigma computacional (`pure`, `numpy`, `cupy`, `multiprocessing`, `openmp`, `mpi`, etc.) |
+| region | Región geográfica evaluada (`amazonia`, `andina`, `caribe`, `orinoquia`, `pacifico`) |
+| workers | Cantidad efectiva de hilos o procesos de cómputo utilizados (1 para secuencial monoproceso) |
+| board_size | Tamaño del lado del tablero ($L$), es decir, si el valor es 30, el tablero es de 30x30 celdas |
+| iterations | Cantidad de iteraciones mensuales simuladas del modelo SIRS (204 meses) |
+| elapsed_time | Tiempo transcurrido de simulación en segundos (excluyendo I/O y renderizado) |
 
 ### Animaciones
 

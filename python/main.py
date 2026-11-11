@@ -60,9 +60,11 @@ def _initialize_npcp(xp: Any, selected_region: Optional[str]):
         with open(f"../outputs/times.csv", "a") as times_csv_file:
             csv_writer = csv.writer(times_csv_file)
             csv_writer.writerow([
-                time.time(), # execution_time
-                f"python_{xp.__name__.lower()}_{region.lower()}", # type
-                os.cpu_count() or "N/A", # workers
+                time.time(), # execution_timestamp
+                "python", # language
+                xp.__name__.lower(), # paradigm
+                region.lower(), # region
+                1, # workers
                 data["board_size"], # board_size
                 204, # iterations
                 elapsed, # elapsed_time
@@ -99,7 +101,16 @@ def main():
     if not times_csv_file.exists():
         with open("../outputs/times.csv", "w+") as times_csv_file:
             csv_writer = csv.writer(times_csv_file)
-            csv_writer.writerow(["execution_timestamp", "type", "workers", "board_size", "iterations", "elapsed_time"])
+            csv_writer.writerow([
+                "execution_timestamp",
+                "language",
+                "paradigm",
+                "region",
+                "workers",
+                "board_size",
+                "iterations",
+                "elapsed_time"
+            ])
 
     parser = argparse.ArgumentParser(description="CLI para el proyecto final de HPC")
     subparsers = parser.add_subparsers(
