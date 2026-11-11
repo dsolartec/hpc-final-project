@@ -1,8 +1,11 @@
 import argparse
+import csv
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 import pandas as pd
+from pathlib import Path
 import time
 from typing import Any, Optional
 
@@ -54,7 +57,18 @@ def _initialize_npcp(xp: Any, selected_region: Optional[str]):
         ac_apply_evolution_rules(xp, data["df"], data)
         elapsed = time.perf_counter() - start
 
-        logger.info(f"[TIEMPO] Tiempo de ejecución para {region}: {elapsed} s")
+        with open(f"../outputs/times.csv", "a") as times_csv_file:
+            csv_writer = csv.writer(times_csv_file)
+            csv_writer.writerow([
+                time.time(), # execution_time
+                f"python_{xp.__name__.lower()}_{region.lower()}", # type
+                os.cpu_count() or "N/A", # workers
+                data["board_size"], # board_size
+                204, # iterations
+                elapsed, # elapsed_time
+            ])
+
+        logger.info(f"[TIEMPO] Tiempo de ejecución para {region}: {elapsed:.2f} s")
 
         with open(f"../outputs/animations/{xp.__name__.lower()}_{region.lower()}.html", "w+") as file:
             file.write(ac_animate_boards(region, data))
@@ -81,6 +95,12 @@ def handle_cupy(args: argparse.Namespace):
 
 
 def main():
+    times_csv_file = Path("../outputs/times.csv")
+    if not times_csv_file.exists():
+        with open("../outputs/times.csv", "w+") as times_csv_file:
+            csv_writer = csv.writer(times_csv_file)
+            csv_writer.writerow(["execution_timestamp", "type", "workers", "board_size", "iterations", "elapsed_time"])
+
     parser = argparse.ArgumentParser(description="CLI para el proyecto final de HPC")
     subparsers = parser.add_subparsers(
         dest="command",

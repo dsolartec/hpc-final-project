@@ -7,3 +7,4 @@ __pycache__/
 # Outputs
 outputs/animations/numpy_*.html
 outputs/animations/cupy_*.html
+outputs/times.csv

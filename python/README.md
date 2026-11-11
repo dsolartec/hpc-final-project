@@ -35,6 +35,10 @@ poetry run python main.py numpy
 
 > **Modo de uso:** `poetry run main.py numpy --region andina`
 
+### Resultados generados
+
+Este comando genera las gráficas animadas de cada uno de los 10 tableros SIR de cada región evaluada, estos estarán ubicados en `../outputs/animations/numpy_{amazonia,andina,caribe,orinoquia,pacifico}.html`. Igualmente, va registrando el tiempo de ejecución en el archivo `outputs/times.csv` con el _type_ `python_numpy_{region}`.
+
 ## Ejecución con CuPy
 
 TODO: Hacer guía para CuPy
