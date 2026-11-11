@@ -238,7 +238,59 @@ Para permitir la comparación rigurosa de desempeño, escalabilidad (*strong/wea
 
 ---
 
-## 9. Consideraciones y Limitaciones Metodológicas (Para Discusión del Informe)
+## 9. Estándar de Validación Epidemiológica y Exportación de Métricas (`outputs/metrics/{paradigm}_{region}.csv`)
+
+Dado que las implementaciones en diferentes paradigmas (Python puro, NumPy, CuPy, multiprocesamiento, C++, OpenMP, MPI, CUDA) emplean diferentes generadores de números pseudoaleatorios (PRNG) y aproximaciones de muestreo, **la validación de corrección computacional entre paradigmas es de naturaleza estadística** (según la Sección 5.7 de la guía del proyecto).
+
+Para habilitar este análisis, **toda implementación debe persistir la serie temporal mensual de la simulación en un archivo CSV individual en `outputs/metrics/{paradigm}_{region}.csv`**.
+
+### 9.1. Esquema de Columnas del Archivo de Métricas
+
+El archivo CSV consta de 18 columnas registradas a lo largo de las 204 fechas mensuales evaluadas (ordenadas cronológicamente de 2007-01 a 2023-12):
+
+| Columna | Tipo | Descripción |
+| :--- | :---: | :--- |
+| `paradigm` | `string` | Paradigma o modelo de paralelización (`pure`, `numpy`, `cupy`, `openmp`, `mpi`, `cuda`, etc.). |
+| `region` | `string` | Región geográfica evaluada en minúsculas (`amazonia`, `andina`, `caribe`, `orinoquia`, `pacifico`). |
+| `fecha` | `string` | Fecha mensual correspondiente a la serie (`YYYY-MM-DD`). |
+| `falciparum_S_h` | `int` | Suma de humanos susceptibles ($S_h$) en toda la cuadrícula para *P. falciparum*. |
+| `falciparum_I_h` | `int` | Suma de humanos infectados ($I_h$) en toda la cuadrícula para *P. falciparum*. |
+| `falciparum_R_h` | `int` | Suma de humanos recuperados/inmunes ($R_h$) en toda la cuadrícula para *P. falciparum*. |
+| `falciparum_S_m` | `int` | Suma de mosquitos susceptibles ($S_m$) en toda la cuadrícula para *P. falciparum*. |
+| `falciparum_I_m` | `int` | Suma de mosquitos infectantes ($I_m$) en toda la cuadrícula para *P. falciparum*. |
+| `falciparum_nuevos_casos_mes` | `int` | Nuevos casos humanos acumulados en los 4 sub-pasos del mes ($\sum \Delta I_{h,f}^{\text{nuevo}}$). |
+| `IPA_falciparum_simulado` | `float` | Incidencia mensual simulada por cada 1.000 habitantes ($\text{falciparum\_nuevos\_casos\_mes} / L^2$). |
+| `IPA_falciparum_real` | `float` | Incidencia mensual real observada reportada en el dataset INS. |
+| `vivax_S_h` | `int` | Suma de humanos susceptibles ($S_h$) en toda la cuadrícula para *P. vivax*. |
+| `vivax_I_h` | `int` | Suma de humanos infectados ($I_h$) en toda la cuadrícula para *P. vivax*. |
+| `vivax_R_h` | `int` | Suma de humanos recuperados/portadores latentes ($R_h$) en toda la cuadrícula para *P. vivax*. |
+| `vivax_S_m` | `int` | Suma de mosquitos susceptibles ($S_m$) en toda la cuadrícula para *P. vivax*. |
+| `vivax_I_m` | `int` | Suma de mosquitos infectantes ($I_m$) en toda la cuadrícula para *P. vivax*. |
+| `vivax_nuevos_casos_mes` | `int` | Nuevos casos acumulados en el mes ($\sum \Delta I_{h,v}^{\text{nuevo}} + \sum \Delta I_{h,v}^{\text{recaída}}$). |
+| `IPA_vivax_simulado` | `float` | Incidencia mensual simulada por cada 1.000 habitantes ($\text{vivax\_nuevos\_casos\_mes} / L^2$). |
+| `IPA_vivax_real` | `float` | Incidencia mensual real observada reportada en el dataset INS. |
+
+### 9.2. Criterios de Aceptación para Validación Estadística
+
+Para certificar que una implementación paralela o en otro lenguaje es equivalente al modelo de referencia, se deben evaluar los siguientes tres criterios sobre estos CSV:
+
+1. **Invariante de Conservación Demográfica:**
+   En cada fila mensual $t$, debe cumplirse estrictamente:
+   $$(\text{falciparum\_S\_h} + \text{falciparum\_I\_h} + \text{falciparum\_R\_h}) = L^2 \times 1\,000$$
+   $$(\text{vivax\_S\_h} + \text{vivax\_I\_h} + \text{vivax\_R\_h}) = L^2 \times 1\,000$$
+2. **Superposición de Curvas Medias en Bandas de Confianza (Sección 5.7):**
+   Al promediar $N$ réplicas independientes de una implementación, la trayectoria de su curva media mensual de `IPA_simulado` debe situarse dentro de las bandas de confianza (o $\mu \pm 2\sigma$) obtenidas por el paradigma de referencia.
+3. **Coincidencia del Tamaño Final Medio dentro del Error Estándar:**
+   El tamaño epidémico acumulado final $C_{\text{final}} = \sum_{t=1}^{204} \text{nuevos\_casos\_mes}(t)$ promedio entre réplicas debe coincidir entre implementaciones dentro del error estándar combinado:
+   $$|\bar{C}_{\text{impl\_A}} - \bar{C}_{\text{impl\_B}}| \le 2 \cdot \sqrt{\text{SE}_A^2 + \text{SE}_B^2}, \quad \text{con } \text{SE} = \frac{\sigma}{\sqrt{N}}$$
+
+### 9.3. Reglas de Medición y Persistencia
+- **Exclusión del tiempo de simulación:** La escritura de los archivos en `outputs/metrics/` debe realizarse **después** de detener el cronómetro de `elapsed_time` reportado en `outputs/times.csv`.
+- **Réplicas Monte Carlo:** En experimentos con múltiples réplicas estocásticas, los archivos deben nombrarse como `outputs/metrics/{paradigm}_{region}_run{id}.csv` o incluir la columna `run_id`.
+
+---
+
+## 10. Consideraciones y Limitaciones Metodológicas (Para Discusión del Informe)
 
 Al redactar la sección de **Discusión de Resultados y Limitaciones del Modelo**, se deben considerar los siguientes puntos técnicos sobre el comportamiento de la simulación:
 

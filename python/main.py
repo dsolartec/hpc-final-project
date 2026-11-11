@@ -72,6 +72,15 @@ def _initialize_pure(selected_region: Optional[str]):
 
         logger.info(f"[TIEMPO] Tiempo de ejecución para {region}: {elapsed:.2f} s")
 
+        # Guardar series temporales para análisis y validación estadística
+        metrics_dir = Path("../outputs/metrics")
+        metrics_dir.mkdir(parents=True, exist_ok=True)
+        if "simulation_history" in data:
+            metrics_df = data["simulation_history"].copy()
+            metrics_df.insert(0, "region", region.lower())
+            metrics_df.insert(0, "paradigm", "pure")
+            metrics_df.to_csv(metrics_dir / f"pure_{region.lower()}.csv", index=False)
+
         with open(f"../outputs/animations/pure_{region.lower()}.html", "w+") as file:
             file.write(ac_animate_boards(region, data))
 
@@ -99,6 +108,7 @@ def _initialize_npcp(xp: Any, selected_region: Optional[str]):
             region,
         ))
 
+    paradigm_name = xp.__name__.lower()
     for region, data in ac_data_store_by_regions.items():
         start = time.perf_counter()
         ac_apply_evolution_rules(xp, data["df"], data)
@@ -109,7 +119,7 @@ def _initialize_npcp(xp: Any, selected_region: Optional[str]):
             csv_writer.writerow([
                 time.time(), # execution_timestamp
                 "python", # language
-                xp.__name__.lower(), # paradigm
+                paradigm_name, # paradigm
                 region.lower(), # region
                 1, # workers
                 data["board_size"], # board_size
@@ -119,7 +129,16 @@ def _initialize_npcp(xp: Any, selected_region: Optional[str]):
 
         logger.info(f"[TIEMPO] Tiempo de ejecución para {region}: {elapsed:.2f} s")
 
-        with open(f"../outputs/animations/{xp.__name__.lower()}_{region.lower()}.html", "w+") as file:
+        # Guardar series temporales para análisis y validación estadística
+        metrics_dir = Path("../outputs/metrics")
+        metrics_dir.mkdir(parents=True, exist_ok=True)
+        if "simulation_history" in data:
+            metrics_df = data["simulation_history"].copy()
+            metrics_df.insert(0, "region", region.lower())
+            metrics_df.insert(0, "paradigm", paradigm_name)
+            metrics_df.to_csv(metrics_dir / f"{paradigm_name}_{region.lower()}.csv", index=False)
+
+        with open(f"../outputs/animations/{paradigm_name}_{region.lower()}.html", "w+") as file:
             file.write(ac_animate_boards(region, data))
 
 

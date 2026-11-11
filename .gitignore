@@ -8,4 +8,7 @@ __pycache__/
 outputs/animations/pure_*.html
 outputs/animations/numpy_*.html
 outputs/animations/cupy_*.html
+outputs/metrics/pure_*.csv
+outputs/metrics/numpy_*.csv
+outputs/metrics/cupy_*.csv
 outputs/times.csv

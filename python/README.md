@@ -24,7 +24,12 @@ poetry run python main.py pure
 |---|---|---|---|
 | `region` | Región a utilizar en el model | `Amazonia`, `Andina`, `Caribe`, `Orinoquia`, `Pacifico` o `todo` | Pacifico |
 
-> **Modo de uso:** `poetry run main.py pure --region andina`
+### Resultados generados
+
+Este comando genera:
+- Las gráficas animadas de cada uno de los 10 tableros SIR de cada región evaluada en `../outputs/animations/pure_{region}.html`.
+- El historial y métricas mensuales de la simulación en `../outputs/metrics/pure_{region}.csv` para análisis y validación estadística.
+- El registro de rendimiento en el archivo `../outputs/times.csv` con `language="python"`, `paradigm="pure"`, `workers=1` y la región evaluada.
 
 ## Ejecución paralelo CPU
 
@@ -49,7 +54,10 @@ poetry run python main.py numpy
 
 ### Resultados generados
 
-Este comando genera las gráficas animadas de cada uno de los 10 tableros SIR de cada región evaluada, estos estarán ubicados en `../outputs/animations/numpy_{amazonia,andina,caribe,orinoquia,pacifico}.html`. Igualmente, va registrando el tiempo de ejecución en el archivo `outputs/times.csv` con `language="python"`, `paradigm="numpy"` y la región evaluada.
+Este comando genera:
+- Las gráficas animadas de cada uno de los 10 tableros SIR de cada región evaluada en `../outputs/animations/numpy_{region}.html`.
+- El historial y métricas mensuales de la simulación en `../outputs/metrics/numpy_{region}.csv` para análisis y validación estadística.
+- El registro de rendimiento en el archivo `../outputs/times.csv` con `language="python"`, `paradigm="numpy"`, `workers=1` y la región evaluada.
 
 ## Ejecución con CuPy
 
