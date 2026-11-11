@@ -3,7 +3,6 @@ import csv
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import pandas as pd
 from pathlib import Path
 import time
@@ -35,7 +34,10 @@ logger.debug(f"[DF] Tamaño del DataFrame (Por regiones): {len(df_by_regions)} d
 
 # Handlers
 
-def _initialize_pure(selected_region: Optional[str]):
+def handle_pure(args: argparse.Namespace):
+    logger.debug("=== Código ejecutándose en Python puro secuencial ===")
+    selected_region = args.region if args.region.lower() != "todo" else None
+
     ac_data_store_by_regions = {}
     for region, new_df in df_by_regions.groupby("region"):
         if selected_region is not None and region.lower() != selected_region.lower():
@@ -51,7 +53,7 @@ def _initialize_pure(selected_region: Optional[str]):
             (data["board_size"] ** 2) * 10 * 204,
             region,
         ))
-
+    
     for region, data in ac_data_store_by_regions.items():
         start = time.perf_counter()
         pure_apply_evolution_rules(data["df"], data)
@@ -83,12 +85,6 @@ def _initialize_pure(selected_region: Optional[str]):
 
         with open(f"../outputs/animations/pure_{region.lower()}.html", "w+") as file:
             file.write(ac_animate_boards(region, data))
-
-
-def handle_pure(args: argparse.Namespace):
-    logger.debug("=== Código ejecutándose en Python puro secuencial ===")
-    region_arg = getattr(args, "region", "Pacifico")
-    _initialize_pure(region_arg if region_arg.lower() != "todo" else None)
 
 
 def _initialize_npcp(xp: Any, selected_region: Optional[str]):
