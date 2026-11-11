@@ -1,16 +1,21 @@
 import argparse
 import logging
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import time
 from typing import Any, Optional
 
+from adapters.utils_animations import ac_animate_boards
 from adapters.utils_npcp import ac_apply_evolution_rules, ac_generate_initial_boards
 
 
+# Increase the limit to 60 MB
+plt.rcParams["animation.embed_limit"] = 100.0
+
 # Configuración básica para mostrar mensajes en consola
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s'
 )
 
@@ -50,6 +55,9 @@ def _initialize_npcp(xp: Any, selected_region: Optional[str]):
         elapsed = time.perf_counter() - start
 
         logger.info(f"[TIEMPO] Tiempo de ejecución para {region}: {elapsed} s")
+
+        with open(f"../outputs/animations/{xp.__name__.lower()}_{region.lower()}.html", "w+") as file:
+            file.write(ac_animate_boards(region, data))
 
 
 def handle_numpy(args: argparse.Namespace):

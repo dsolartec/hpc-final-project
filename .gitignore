@@ -1,2 +1,9 @@
+# MacOS
+.DS_Store
+
 # Python
 __pycache__/
+
+# Outputs
+outputs/animations/numpy_*.html
+outputs/animations/cupy_*.html
