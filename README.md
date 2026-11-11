@@ -6,6 +6,16 @@
 - Alejandro Garcés ([@SamuelMarroquin2009-12](https://github.com/SamuelMarroquin2009-12))
 - Juan Esteban Ramirez ([@juanes779](https://github.com/juanes779))
 
+## Contexto del problema
+
+La malaria (paludismo) es una afección parasitaria transmitida por mosquitos hembra del género Anopheles que exhibe una acentuada heterogeneidad espaciotemporal en Colombia. La transmisión se concentra en focos endémicos y epidémicos específicos (como la Costa Pacífica, Urabá-Bajo Cauca-Alto San Jorge, Amazonía y Orinoquía), regulada por gradientes climáticos, regímenes hidrológicos y dinámicas de movilidad poblacional.
+
+El modelo utilizado para la simulación del contagio entre mosquitos y humanos para cada cepa de malaria (P. Vivax y P. Falciparum) es el Ross-Macdonald, este describe el comportamiento de esa interacción en un rango de días en base al clima de la región analizada (Se adaptó a que fuera mensual).
+
+Se están analizando dos cepas diferentes porque una de ellas vive en temperaturas altas (P. Vivax) y otra en temperaturas bajas (P. Falciparum) dando como resultado que una cepa predomina sobre la otra en cada región del país, pero la que predomina a nivel general es la P. Vivax.
+
+Los datos utilizados para la simulación corresponden a los entregados por la Guía de Atención Médica (GAM) del Ministerio de Salud de Colombia desde Enero de 2007 hasta Diciembre de 2023.
+
 ## Python
 
 ### Pre-requisitos
