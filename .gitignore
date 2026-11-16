@@ -12,3 +12,11 @@ outputs/metrics/pure_*.csv
 outputs/metrics/numpy_*.csv
 outputs/metrics/cupy_*.csv
 outputs/times.csv
+
+# Binarios C++
+cpp/secuencial
+cpp/openmp
+cpp/mpi
+cpp/openmp_glibc_lgamma
+outputs/animations/multiprocessing_*.html
+docs/informe.html
