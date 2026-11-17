@@ -1,449 +1,436 @@
-import argparse
-import csv
+
+
 import logging
-import matplotlib.pyplot as plt
-import numpy as np
-import os
-import pandas as pd
-from pathlib import Path
 import random
 import time
+from multiprocessing import get_context
+from multiprocessing.shared_memory import SharedMemory
+from threading import BrokenBarrierError
 from typing import Any, Optional
 
-from adapters.utils_animations import ac_animate_boards
-from adapters.utils_npcp import ac_apply_evolution_rules, ac_generate_initial_boards
-from adapters.utils_mp import ac_apply_evolution_rules as mp_apply_evolution_rules
-from adapters.utils_parallel import DEFAULT_RUNS, DEFAULT_SEED, run_parallel_replicas
+import numpy as np
+import pandas as pd
+
 from adapters.utils_pure import (
-    ac_apply_evolution_rules as pure_apply_evolution_rules,
-    ac_generate_initial_boards as pure_generate_initial_boards,
+    ac_sample_binomial,
+    calc_climate_suitability,
+    calc_effective_exposure,
+    calc_immunity_loss_probability,
+    calc_infection_probability,
+    calc_mosquito_birth_probability,
+    calc_mosquito_death_probability,
+    calc_recovery_probability,
+    calc_relapse_probability,
 )
-
-
-# Increase the limit to 60 MB
-plt.rcParams["animation.embed_limit"] = 100.0
-
-# Configuración básica para mostrar mensajes en consola
-logging.basicConfig(
-    level=logging.INFO,
-    format='[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s'
+from domain.constants import (
+    AC_BITING_RATE,
+    AC_MAX_MOSQUITOES_PER_CELL,
+    AC_MOSQUITO_MAX_AGE_DAYS,
+    AC_STEPS_PER_MONTH,
+    AC_STRAIN_PARAMS,
 )
-
-logger = logging.getLogger("main")
-
-# Datasets
-
-df_by_regions = pd.read_parquet("../data/GAM_regional_enriquecido.parquet")
-logger.debug(f"[DF] Tamaño del DataFrame (Por regiones): {len(df_by_regions)} datos")
-
-# Handlers
-
-def handle_pure(args: argparse.Namespace):
-    logger.debug("=== Código ejecutándose en Python puro secuencial ===")
-    selected_region = args.region if args.region.lower() != "todo" else None
-
-    ac_data_store_by_regions = {}
-    for region, new_df in df_by_regions.groupby("region"):
-        if selected_region is not None and region.lower() != selected_region.lower():
-            continue
-
-        ac_data_store_by_regions[region] = {
-            "df": new_df,
-            **pure_generate_initial_boards(new_df),
-        }
-
-    for region, data in ac_data_store_by_regions.items():
-        logger.info("[CELDAS] {0} celdas a analizar para la región {1}".format(
-            (data["board_size"] ** 2) * 10 * 204,
-            region,
-        ))
-    
-    for region, data in ac_data_store_by_regions.items():
-        start = time.perf_counter()
-        pure_apply_evolution_rules(data["df"], data)
-        elapsed = time.perf_counter() - start
-
-        with open(f"../outputs/times.csv", "a") as times_csv_file:
-            csv_writer = csv.writer(times_csv_file)
-            csv_writer.writerow([
-                time.time(), # execution_timestamp
-                "python", # language
-                "pure", # paradigm
-                region.lower(), # region
-                1, # workers
-                data["board_size"], # board_size
-                204, # iterations
-                elapsed, # elapsed_time
-            ])
-
-        logger.info(f"[TIEMPO] Tiempo de ejecución para {region}: {elapsed:.2f} s")
-
-        # Guardar series temporales para análisis y validación estadística
-        metrics_dir = Path("../outputs/metrics")
-        metrics_dir.mkdir(parents=True, exist_ok=True)
-        if "simulation_history" in data:
-            metrics_df = data["simulation_history"].copy()
-            metrics_df.insert(0, "region", region.lower())
-            metrics_df.insert(0, "paradigm", "pure")
-            metrics_df.to_csv(metrics_dir / f"pure_{region.lower()}.csv", index=False)
-
-        if not args.disable_animation:
-            with open(f"../outputs/animations/pure_{region.lower()}.html", "w+") as file:
-                file.write(ac_animate_boards(region, data))
+from domain.enums import MalariaType
 
 
-def _initialize_npcp(xp: Any, selected_region: Optional[str], disable_animation: bool):
-    ac_data_store_by_regions = {}
-    for region, new_df in df_by_regions.groupby("region"):
-        if selected_region is not None and region.lower() != selected_region.lower():
-            continue
+logger = logging.getLogger("utils_mp")
 
-        ac_data_store_by_regions[region] = {
-            "df": new_df,
-            **ac_generate_initial_boards(xp, new_df),
-        }
+AC_STRAINS: tuple[MalariaType, ...] = (MalariaType.FALCIPARUM, MalariaType.VIVAX)
 
-    for region, data in ac_data_store_by_regions.items():
-        logger.info("[CELDAS] {0} celdas a analizar para la región {1}".format(
-            (data["board_size"] ** 2) * 10 * 204,
-            region,
-        ))
+# Orden de los 5 tableros por cepa dentro del búfer compartido
+_BOARD_ROLES: tuple[str, ...] = (
+    "humans_{s}_susceptible_count_board",
+    "humans_{s}_infected_count_board",
+    "humans_{s}_recovered_count_board",
+    "mosquitoes_{s}_susceptible_count_board",
+    "mosquitoes_{s}_infected_count_board",
+)
+_S_H, _I_H, _R_H, _S_M, _I_M = range(5)
 
-    paradigm_name = xp.__name__.lower()
-    for region, data in ac_data_store_by_regions.items():
-        start = time.perf_counter()
-        ac_apply_evolution_rules(xp, data["df"], data)
-        elapsed = time.perf_counter() - start
-
-        with open(f"../outputs/times.csv", "a") as times_csv_file:
-            csv_writer = csv.writer(times_csv_file)
-            csv_writer.writerow([
-                time.time(), # execution_timestamp
-                "python", # language
-                paradigm_name, # paradigm
-                region.lower(), # region
-                1, # workers
-                data["board_size"], # board_size
-                204, # iterations
-                elapsed, # elapsed_time
-            ])
-
-        logger.info(f"[TIEMPO] Tiempo de ejecución para {region}: {elapsed:.2f} s")
-
-        # Guardar series temporales para análisis y validación estadística
-        metrics_dir = Path("../outputs/metrics")
-        metrics_dir.mkdir(parents=True, exist_ok=True)
-        if "simulation_history" in data:
-            metrics_df = data["simulation_history"].copy()
-            metrics_df.insert(0, "region", region.lower())
-            metrics_df.insert(0, "paradigm", paradigm_name)
-            metrics_df.to_csv(metrics_dir / f"{paradigm_name}_{region.lower()}.csv", index=False)
-
-        if not disable_animation:
-            with open(f"../outputs/animations/{paradigm_name}_{region.lower()}.html", "w+") as file:
-                file.write(ac_animate_boards(region, data))
+_DTYPE = np.int32
 
 
-def handle_numpy(args: argparse.Namespace):
-    logger.debug("=== Código ejecutándose con NumPy ===")
-    _initialize_npcp(np, args.region if args.region.lower() != "todo" else None, args.disable_animation)
+def _board_key(role: str, strain: MalariaType) -> str:
+    return role.format(s=strain.value)
 
 
-def handle_cupy(args: argparse.Namespace):
+# ============================================================================
+# 1. PASO DE SIMULACIÓN SOBRE UNA FRANJA DE FILAS (se ejecuta dentro de cada worker)
+# ============================================================================
+
+
+def _count_neighbors_local(ext: list[list[int]]) -> list[list[int]]:
+    """
+    Suma de los 8 vecinos de Moore para las filas locales de una franja.
+
+    `ext` trae las filas de la franja más una fila de halo arriba y otra abajo
+    (ya resueltas con frontera periódica), por lo que len(ext) = filas_locales + 2.
+    Las columnas usan frontera periódica.
+    """
+    L = len(ext[0])
+    result: list[list[int]] = []
+    for i in range(1, len(ext) - 1):
+        up, mid, down = ext[i - 1], ext[i], ext[i + 1]
+        row = [0] * L
+        for c in range(L):
+            c_prev = c - 1  # c = 0 -> -1 apunta a la última columna (toroide)
+            c_next = c + 1 if c + 1 < L else 0
+            row[c] = (
+                up[c_prev] + up[c] + up[c_next]
+                + mid[c_prev] + mid[c_next]
+                + down[c_prev] + down[c] + down[c_next]
+            )
+        result.append(row)
+    return result
+
+
+def _step_strain_rows(
+    strain: MalariaType,
+    cur: np.ndarray,
+    nxt: np.ndarray,
+    cases: np.ndarray,
+    r0: int,
+    r1: int,
+    temperature: float,
+    humidity: float,
+    precipitation: float,
+    dt_days: float,
+    rng: Optional[random.Random],
+) -> None:
+    """
+    Evoluciona las filas [r0, r1) de una cepa un sub-paso `dt_days`.
+
+    Lee de `cur` (forma 5 x L x L, solo lectura) y escribe en `nxt` (5 x L x L) únicamente
+    sus filas, y acumula los casos nuevos en `cases[r0:r1]` (L x L).
+    """
+    L = cur.shape[-1]
+    params = AC_STRAIN_PARAMS[strain]
+
+    climate_suitability, f_t = calc_climate_suitability(
+        temperature, humidity, precipitation,
+        params["t_min"], params["t_opt"], params["t_sigma"],
+    )
+
+    # Filas locales + halo (frontera periódica en filas)
+    rows_idx = [r % L for r in range(r0 - 1, r1 + 1)]
+    ext = [cur[k][rows_idx].tolist() for k in range(5)]
+
+    I_h_neighbors = _count_neighbors_local(ext[_I_H])
+    I_m_neighbors = _count_neighbors_local(ext[_I_M])
+    m_alive_ext = [
+        [s + i for s, i in zip(row_s, row_i)]
+        for row_s, row_i in zip(ext[_S_M], ext[_I_M])
+    ]
+    M_alive_neighbors = _count_neighbors_local(m_alive_ext)
+
+    # Probabilidades constantes del sub-paso
+    rate_m_to_h = max(0.0, min(1.0, AC_BITING_RATE * params["prob_mosquito_to_human"]))
+    p_recover_h = calc_recovery_probability(dt_days, params["recuperation_days"])
+    p_loss_imm_h = calc_immunity_loss_probability(dt_days, params["immunity_loss_days"])
+    p_relapse = calc_relapse_probability(dt_days, params["relapse_rate"])
+    p_death_m = calc_mosquito_death_probability(dt_days, AC_MOSQUITO_MAX_AGE_DAYS)
+    rate_h_to_m = max(0.0, min(1.0, AC_BITING_RATE * params["prob_human_to_mosquito"] * f_t))
+    has_relapse = params["relapse_rate"] > 0.0
+
+    n_rows = r1 - r0
+    out = [[[0] * L for _ in range(n_rows)] for _ in range(5)]
+    out_cases = [[0] * L for _ in range(n_rows)]
+
+    for j in range(n_rows):
+        sh_row, ih_row, rh_row = ext[_S_H][j + 1], ext[_I_H][j + 1], ext[_R_H][j + 1]
+        sm_row, im_row = ext[_S_M][j + 1], ext[_I_M][j + 1]
+        ih_neigh_row, im_neigh_row = I_h_neighbors[j], I_m_neighbors[j]
+        m_alive_neigh_row = M_alive_neighbors[j]
+
+        for c in range(L):
+            s_h, i_h, r_h = sh_row[c], ih_row[c], rh_row[c]
+            s_m, i_m = sm_row[c], im_row[c]
+
+            i_m_eff = calc_effective_exposure(i_m, im_neigh_row[c] / 8.0)
+            i_h_eff = calc_effective_exposure(i_h, ih_neigh_row[c] / 8.0)
+
+            # Dinámica humana (S -> I -> R -> S, con recaídas en P. vivax)
+            p_infect_h = calc_infection_probability(rate_m_to_h, i_m_eff, dt_days)
+            new_infected_h = ac_sample_binomial(s_h, p_infect_h, rng)
+            new_recovered_h = ac_sample_binomial(i_h, p_recover_h, rng)
+
+            relapsed_h = ac_sample_binomial(r_h, p_relapse, rng) if has_relapse else 0
+            remaining_r_h = max(0, r_h - relapsed_h)
+            lost_immunity_h = ac_sample_binomial(remaining_r_h, p_loss_imm_h, rng)
+
+            out[_S_H][j][c] = s_h - new_infected_h + lost_immunity_h
+            out[_I_H][j][c] = i_h + new_infected_h - new_recovered_h + relapsed_h
+            out[_R_H][j][c] = remaining_r_h + new_recovered_h - lost_immunity_h
+            out_cases[j][c] = new_infected_h + relapsed_h
+
+            # Dinámica del mosquito
+            dead_s_m = ac_sample_binomial(s_m, p_death_m, rng)
+            dead_i_m = ac_sample_binomial(i_m, p_death_m, rng)
+            s_m_surv = s_m - dead_s_m
+            i_m_surv = i_m - dead_i_m
+
+            empty_m_slots = max(0, AC_MAX_MOSQUITOES_PER_CELL - (s_m_surv + i_m_surv))
+            p_birth_m = calc_mosquito_birth_probability(
+                climate_suitability,
+                m_alive_neigh_row[c] / 8.0,
+                dt_days,
+            )
+            newborn_m = ac_sample_binomial(empty_m_slots, p_birth_m, rng)
+
+            p_infect_m = calc_infection_probability(rate_h_to_m, i_h_eff, dt_days)
+            new_infected_m = ac_sample_binomial(s_m_surv, p_infect_m, rng)
+
+            out[_S_M][j][c] = s_m_surv - new_infected_m + newborn_m
+            out[_I_M][j][c] = i_m_surv + new_infected_m
+
+    for k in range(5):
+        nxt[k, r0:r1, :] = out[k]
+    cases[r0:r1, :] += np.asarray(out_cases, dtype=_DTYPE)
+
+
+def _worker_main(
+    rank: int,
+    r0: int,
+    r1: int,
+    state_name: str,
+    cases_name: str,
+    state_shape: tuple[int, ...],
+    cases_shape: tuple[int, ...],
+    schedule: list[tuple[float, float, float, float]],
+    seed: Optional[int],
+    ready_barrier: Any,
+    step_barrier: Any,
+    month_barrier: Any,
+) -> None:
+    """Proceso persistente: evoluciona su franja de filas durante toda la simulación."""
+    state_shm = SharedMemory(name=state_name)
+    cases_shm = SharedMemory(name=cases_name)
+    state = cases = None
     try:
-        import cupy as cp
+        state = np.ndarray(state_shape, dtype=_DTYPE, buffer=state_shm.buf)
+        cases = np.ndarray(cases_shape, dtype=_DTYPE, buffer=cases_shm.buf)
+        rng = random.Random(None if seed is None else seed + rank)
 
-        # Verificar que CUDA realmente responda
-        device_count = cp.cuda.runtime.getDeviceCount()
-        if device_count == 0:
-            raise Exception
+        ready_barrier.wait()
 
-        logger.debug("=== Código ejecutándose con CuPy ===")
-        _initialize_npcp(cp, args.region if args.region.lower() != "todo" else None, args.disable_animation)
-    except Exception:
-        logger.error("CuPy no está instalado o no hay GPUs disponibles")
+        t = 0  # sub-pasos completados; el estado actual está en el búfer t % 2
+        for temperature, humidity, precipitation, dt_days in schedule:
+            for _ in range(AC_STEPS_PER_MONTH):
+                cur_buf = t % 2
+                for s_idx, strain in enumerate(AC_STRAINS):
+                    _step_strain_rows(
+                        strain,
+                        state[cur_buf, s_idx],
+                        state[1 - cur_buf, s_idx],
+                        cases[s_idx],
+                        r0, r1,
+                        temperature, humidity, precipitation, dt_days,
+                        rng,
+                    )
+                step_barrier.wait()  # nadie lee el nuevo estado hasta que todos escriban
+                t += 1
+
+            month_barrier.wait()  # A: el principal toma la instantánea del mes
+            month_barrier.wait()  # B: el principal terminó, se puede continuar
+    except BrokenBarrierError:
+        pass  # otro proceso falló; el principal reporta el error
+    except BaseException:
+        for barrier in (ready_barrier, step_barrier, month_barrier):
+            barrier.abort()
+        raise
+    finally:
+        del state, cases
+        state_shm.close()
+        cases_shm.close()
 
 
-def handle_multiprocessing(args: argparse.Namespace):
+# ============================================================================
+# 2. ORQUESTADOR (proceso principal)
+# ============================================================================
+
+
+def _monthly_schedule(df: pd.DataFrame) -> pd.DataFrame:
+    """Misma agregación mensual que utils_pure.ac_apply_evolution_rules."""
+    return (
+        df.groupby("fecha", as_index=False)
+        .agg({
+            "temperatura_media_Celsius": "mean",
+            "humedad_mediana_pct": "mean",
+            "precipitacion_media_mm": "mean",
+            "IPA_falciparum": "mean",
+            "IPA_vivax": "mean",
+            "falciparum": "sum",
+            "vivax": "sum",
+        })
+        .sort_values("fecha")
+        .reset_index(drop=True)
+    )
+
+
+def ac_apply_evolution_rules(
+    df: pd.DataFrame,
+    ac_boards_data: dict[str, Any],
+    workers: int,
+    seed: Optional[int] = None,
+    start_method: str = "spawn",
+) -> pd.DataFrame:
     """
-    Paralelo en CPU con multiprocessing. Dos estrategias:
-      - replicas (por defecto): R réplicas Monte Carlo repartidas entre p procesos
-        (adapters/utils_parallel.py; "nivel natural" según la guía, §5.6 paso 5).
-      - franjas: una simulación repartida por franjas de filas entre p procesos con
-        memoria compartida (adapters/utils_mp.py).
+    Equivalente paralelo de `utils_pure.ac_apply_evolution_rules(df, ac_boards_data)`.
+
+    Parameters:
+        df: DataFrame de la región (columnas de clima e IPA).
+        ac_boards_data: Salida de `ac_generate_initial_boards` (tableros como listas anidadas).
+        workers: Número de procesos solicitado (se limita a L, el número de filas del tablero).
+        seed: Semilla base; el worker `rank` usa `seed + rank`. None = no reproducible.
+        start_method: Método de arranque de procesos (`spawn` funciona en Linux, macOS y Windows).
+
+    Al terminar rellena en `ac_boards_data` los 10 tableros finales, `simulation_history`,
+    `frames_snapshots` y, además:
+        - `workers`: procesos efectivos usados.
+        - `setup_time`: segundos de arranque de procesos (excluido de `compute_time`).
+        - `compute_time`: segundos de simulación, desde que todos los procesos están listos.
     """
-    if args.estrategia == "franjas":
-        handle_multiprocessing_franjas(args)
-        return
-    if args.runs is None:
-        args.runs = DEFAULT_RUNS
+    df_monthly = _monthly_schedule(df)
+    L = int(ac_boards_data["board_size"])
+    total_cells = L * L
 
-    logger.debug("=== Código ejecutándose con multiprocessing (réplicas) ===")
-    selected_region = args.region if args.region.lower() != "todo" else None
+    workers_eff = max(1, min(int(workers), L))
+    if workers_eff != workers:
+        logger.warning(f"[WORKERS] Se solicitaron {workers} procesos pero se usarán {workers_eff} (L={L})")
 
-    for region, new_df in df_by_regions.groupby("region"):
-        if selected_region is not None and region.lower() != selected_region.lower():
-            continue
+    bounds = [
+        (int(chunk[0]), int(chunk[-1]) + 1)
+        for chunk in np.array_split(np.arange(L), workers_eff)
+    ]
 
-        logger.info(
-            f"[MULTIPROCESSING] Región {region}: {args.runs} réplicas, "
-            f"{args.workers} procesos, kernel {args.kernel}"
+    schedule = [
+        (
+            float(row.temperatura_media_Celsius),
+            float(row.humedad_mediana_pct),
+            float(row.precipitacion_media_mm),
+            float(pd.Timestamp(row.fecha).days_in_month) / float(AC_STEPS_PER_MONTH),
         )
-        elapsed, results = run_parallel_replicas(
-            new_df,
-            workers=args.workers,
-            runs=args.runs,
-            seed=args.seed,
-            kernel=args.kernel,
-            keep_first_data=not args.disable_animation,
-        )
+        for row in df_monthly.itertuples()
+    ]
 
-        # Todo lo siguiente ocurre después de detener el cronómetro
-        with open(f"../outputs/times.csv", "a") as times_csv_file:
-            csv_writer = csv.writer(times_csv_file)
-            csv_writer.writerow([
-                time.time(), # execution_timestamp
-                "python", # language
-                "multiprocessing", # paradigm
-                region.lower(), # region
-                args.workers, # workers (procesos activos, exacto)
-                results[0]["board_size"], # board_size
-                204, # iterations
-                elapsed, # elapsed_time (lote completo de réplicas)
-            ])
+    state_shape = (2, len(AC_STRAINS), 5, L, L)  # [búfer, cepa, tablero, fila, columna]
+    cases_shape = (len(AC_STRAINS), L, L)
+    state_bytes = int(np.prod(state_shape)) * np.dtype(_DTYPE).itemsize
+    cases_bytes = int(np.prod(cases_shape)) * np.dtype(_DTYPE).itemsize
 
-        logger.info(
-            f"[TIEMPO] Tiempo de ejecución para {region}: {elapsed:.2f} s "
-            f"({args.runs} réplicas, {args.workers} procesos)"
-        )
+    state_shm = SharedMemory(create=True, size=state_bytes)
+    cases_shm = SharedMemory(create=True, size=cases_bytes)
+    state = np.ndarray(state_shape, dtype=_DTYPE, buffer=state_shm.buf)
+    cases = np.ndarray(cases_shape, dtype=_DTYPE, buffer=cases_shm.buf)
+    state[:] = 0
+    cases[:] = 0
 
-        metrics_dir = Path("../outputs/metrics")
-        metrics_dir.mkdir(parents=True, exist_ok=True)
-        for result in results:
-            metrics_df = result["simulation_history"].copy()
-            metrics_df.insert(0, "region", region.lower())
-            metrics_df.insert(0, "paradigm", "multiprocessing")
-            metrics_df.to_csv(
-                metrics_dir / f"multiprocessing_{region.lower()}_run{result['run_id']}.csv",
-                index=False,
+    ctx = get_context(start_method)
+    processes = []
+    cur = final = None  # vistas sobre la memoria compartida (se liberan antes de cerrarla)
+    history: list[dict[str, Any]] = []
+    frames_snapshots: list[dict[str, Any]] = []
+
+    try:
+        # Estado inicial en el búfer 0
+        for s_idx, strain in enumerate(AC_STRAINS):
+            for k, role in enumerate(_BOARD_ROLES):
+                state[0, s_idx, k] = np.asarray(ac_boards_data[_board_key(role, strain)], dtype=_DTYPE)
+
+        ready_barrier = ctx.Barrier(workers_eff + 1)
+        step_barrier = ctx.Barrier(workers_eff)
+        month_barrier = ctx.Barrier(workers_eff + 1)
+
+        setup_start = time.perf_counter()
+        for rank, (r0, r1) in enumerate(bounds):
+            process = ctx.Process(
+                target=_worker_main,
+                args=(
+                    rank, r0, r1,
+                    state_shm.name, cases_shm.name,
+                    state_shape, cases_shape,
+                    schedule, seed,
+                    ready_barrier, step_barrier, month_barrier,
+                ),
+                daemon=True,
             )
+            process.start()
+            processes.append(process)
 
-        if not args.disable_animation:
-            with open(f"../outputs/animations/multiprocessing_{region.lower()}.html", "w+") as file:
-                file.write(ac_animate_boards(region, results[0]["data"]))
+        ready_barrier.wait()
+        compute_start = time.perf_counter()
+        setup_time = compute_start - setup_start
 
+        t = 0
+        for row in df_monthly.itertuples():
+            t += AC_STEPS_PER_MONTH
+            month_barrier.wait()  # A: los workers terminaron el mes
 
-def handle_multiprocessing_franjas(args: argparse.Namespace):
-    """
-    Descomposición de dominio: el tablero se reparte por franjas de filas entre p procesos
-    persistentes que comparten memoria (SharedMemory) y se sincronizan con barreras.
-    Cada réplica (--runs) es una simulación completa con semilla propia.
-    """
-    logger.debug("=== Código ejecutándose con multiprocessing (franjas de filas) ===")
-    selected_region = args.region if args.region.lower() != "todo" else None
-    requested_workers = args.workers if args.workers is not None else (os.cpu_count() or 1)
-    runs = args.runs if args.runs is not None else 1
-    paradigm = "multiprocessing_franjas"
+            cur = state[t % 2]
+            month_cases = [int(cases[s_idx].sum(dtype=np.int64)) for s_idx in range(len(AC_STRAINS))]
+            cases[:] = 0
 
-    for region, new_df in df_by_regions.groupby("region"):
-        if selected_region is not None and region.lower() != selected_region.lower():
-            continue
+            snapshot: dict[str, Any] = {"fecha": pd.Timestamp(row.fecha)}
+            record: dict[str, Any] = {"fecha": row.fecha}
+            for s_idx, strain in enumerate(AC_STRAINS):
+                name = strain.value
+                boards = []
+                for k, role in enumerate(_BOARD_ROLES):
+                    board = cur[s_idx, k].copy()
+                    snapshot[_board_key(role, strain)] = board
+                    boards.append(int(board.sum(dtype=np.int64)))
+                record[f"{name}_S_h"] = boards[_S_H]
+                record[f"{name}_I_h"] = boards[_I_H]
+                record[f"{name}_R_h"] = boards[_R_H]
+                record[f"{name}_S_m"] = boards[_S_M]
+                record[f"{name}_I_m"] = boards[_I_M]
+                record[f"{name}_nuevos_casos_mes"] = month_cases[s_idx]
+                record[f"IPA_{name}_simulado"] = month_cases[s_idx] / float(total_cells)
+                record[f"IPA_{name}_real"] = float(getattr(row, f"IPA_{name}"))
 
-        for run in range(runs):
-            # Semillas: inicialización con seed + run; el worker k usa (seed + 1000 * run) + k,
-            # de modo que réplicas distintas nunca comparten flujo aleatorio.
-            init_rng = random.Random(args.seed + run)
-            data = {"df": new_df, **pure_generate_initial_boards(new_df, rng=init_rng)}
-            if run == 0:
-                logger.info("[CELDAS] {0} celdas a analizar para la región {1}".format(
-                    (data["board_size"] ** 2) * 10 * 204, region,
-                ))
+            frames_snapshots.append(snapshot)
+            history.append(record)
 
-            mp_apply_evolution_rules(new_df, data, workers=requested_workers, seed=args.seed + 1000 * run)
-            workers = data["workers"]  # Procesos efectivos (acotados al tamaño del tablero)
-            elapsed = data["compute_time"]  # Excluye el arranque de procesos, I/O y renderizado
+            month_barrier.wait()  # B: los workers pueden empezar el mes siguiente
 
-            # Todo lo siguiente ocurre después de detener el cronómetro
-            with open(f"../outputs/times.csv", "a") as times_csv_file:
-                csv_writer = csv.writer(times_csv_file)
-                csv_writer.writerow([
-                    time.time(), # execution_timestamp
-                    "python", # language
-                    paradigm, # paradigm
-                    region.lower(), # region
-                    workers, # workers (procesos efectivos, exacto)
-                    data["board_size"], # board_size
-                    204, # iterations
-                    elapsed, # elapsed_time
-                ])
+        compute_time = time.perf_counter() - compute_start
 
-            logger.info(
-                f"[TIEMPO] Tiempo de ejecución para {region} con {workers} procesos (réplica {run}): {elapsed:.2f} s "
-                f"(arranque de procesos: {data['setup_time']:.2f} s, no incluido)"
-            )
+        final = state[t % 2]
+        for s_idx, strain in enumerate(AC_STRAINS):
+            for k, role in enumerate(_BOARD_ROLES):
+                ac_boards_data[_board_key(role, strain)] = final[s_idx, k].tolist()
 
-            metrics_dir = Path("../outputs/metrics")
-            metrics_dir.mkdir(parents=True, exist_ok=True)
-            metrics_df = data["simulation_history"].copy()
-            metrics_df.insert(0, "region", region.lower())
-            metrics_df.insert(0, "paradigm", paradigm)
-            sufijo = f"_run{run}" if runs > 1 else ""
-            metrics_df.to_csv(metrics_dir / f"{paradigm}_{region.lower()}{sufijo}.csv", index=False)
+        for process in processes:
+            process.join(timeout=30)
+        if any(p.exitcode not in (0, None) for p in processes):
+            raise RuntimeError("Algún proceso worker terminó con error")
 
-            if run == 0 and not args.disable_animation:
-                with open(f"../outputs/animations/{paradigm}_{region.lower()}.html", "w+") as file:
-                    file.write(ac_animate_boards(region, data))
+    except BrokenBarrierError as exc:
+        raise RuntimeError("Un proceso worker falló (revisa el traceback en la consola)") from exc
+    finally:
+        for process in processes:
+            if process.is_alive():
+                process.terminate()
+            process.join()
+        cur = final = None
+        del state, cases
+        state_shm.close()
+        state_shm.unlink()
+        cases_shm.close()
+        cases_shm.unlink()
 
+    # Orden de columnas igual al de la versión secuencial
+    column_order = ["fecha"]
+    for strain in AC_STRAINS:
+        name = strain.value
+        column_order += [
+            f"{name}_S_h", f"{name}_I_h", f"{name}_R_h", f"{name}_S_m", f"{name}_I_m",
+            f"{name}_nuevos_casos_mes", f"IPA_{name}_simulado", f"IPA_{name}_real",
+        ]
+    df_sim = pd.DataFrame(history)[column_order]
 
-def main():
-    times_csv_file = Path("../outputs/times.csv")
-    if not times_csv_file.exists():
-        with open("../outputs/times.csv", "w+") as times_csv_file:
-            csv_writer = csv.writer(times_csv_file)
-            csv_writer.writerow([
-                "execution_timestamp",
-                "language",
-                "paradigm",
-                "region",
-                "workers",
-                "board_size",
-                "iterations",
-                "elapsed_time"
-            ])
-
-    parser = argparse.ArgumentParser(description="CLI para el proyecto final de HPC")
-    subparsers = parser.add_subparsers(
-        dest="command",
-        help="Comandos disponibles",
-        required=True,
-    )
-
-    # Subcommand: Pure
-    parser_pure = subparsers.add_parser(
-        help="Ejecutar código puro (Secuencial)",
-        name="pure",
-    )
-    parser_pure.add_argument(
-        "--disable-animation",
-        action=argparse.BooleanOptionalAction,
-        help="No generar animación HTML",
-        required=False,
-    )
-    parser_pure.add_argument(
-        "--region",
-        choices=["amazonia", "andina", "caribe", "orinoquia", "pacifico", "todo"],
-        default="Pacifico",
-        help="Región seleccionada para ejecutar el modelo, por defecto: Pacifico",
-        required=False,
-        type=str,
-    )
-    parser_pure.set_defaults(func=handle_pure)
-
-    # Subcommand: NumPy
-    parser_numpy = subparsers.add_parser(
-        help="Ejecutar código con NumPy",
-        name="numpy",
-    )
-    parser_numpy.add_argument(
-        "--disable-animation",
-        action=argparse.BooleanOptionalAction,
-        help="No generar animación HTML",
-        required=False,
-    )
-    parser_numpy.add_argument(
-        "--region",
-        choices=["amazonia", "andina", "caribe", "orinoquia", "pacifico", "todo"],
-        default="Pacifico",
-        help="Región seleccionada para ejecutar el modelo, por defecto: Pacifico",
-        required=False,
-        type=str,
-    )
-    parser_numpy.set_defaults(func=handle_numpy)
-
-    # Subcommand: CuPy
-    parser_cupy = subparsers.add_parser(
-        help="Ejecutar código con CuPy",
-        name="cupy",
-    )
-    parser_cupy.add_argument(
-        "--disable-animation",
-        action=argparse.BooleanOptionalAction,
-        help="No generar animación HTML",
-        required=False,
-    )
-    parser_cupy.add_argument(
-        "--region",
-        choices=["amazonia", "andina", "caribe", "orinoquia", "pacifico", "todo"],
-        default="Pacifico",
-        help="Región seleccionada para ejecutar el modelo, por defecto: Pacifico",
-        required=False,
-        type=str,
-    )
-    parser_cupy.set_defaults(func=handle_cupy)
-
-    # Subcommand: multiprocessing (paralelo CPU)
-    parser_mp = subparsers.add_parser(
-        help="Ejecutar réplicas Monte Carlo en paralelo con multiprocessing",
-        name="multiprocessing",
-    )
-    parser_mp.add_argument(
-        "--disable-animation",
-        action=argparse.BooleanOptionalAction,
-        help="No generar animación HTML",
-        required=False,
-    )
-    parser_mp.add_argument(
-        "--region",
-        choices=["amazonia", "andina", "caribe", "orinoquia", "pacifico", "todo"],
-        default="Pacifico",
-        help="Región seleccionada para ejecutar el modelo, por defecto: Pacifico",
-        required=False,
-        type=str,
-    )
-    parser_mp.add_argument(
-        "--estrategia",
-        choices=["replicas", "franjas"],
-        default="replicas",
-        help="replicas: R simulaciones independientes en paralelo (por defecto); "
-             "franjas: una simulación repartida por filas con memoria compartida",
-        required=False,
-        type=str,
-    )
-    parser_mp.add_argument(
-        "--workers",
-        default=4,
-        help="Cantidad de procesos de trabajo (p), por defecto: 4",
-        required=False,
-        type=int,
-    )
-    parser_mp.add_argument(
-        "--runs",
-        default=None,
-        help=f"Cantidad de réplicas Monte Carlo (R), por defecto: {DEFAULT_RUNS} en replicas y 1 en franjas",
-        required=False,
-        type=int,
-    )
-    parser_mp.add_argument(
-        "--seed",
-        default=DEFAULT_SEED,
-        help=f"Semilla base (la réplica k usa seed + k), por defecto: {DEFAULT_SEED}",
-        required=False,
-        type=int,
-    )
-    parser_mp.add_argument(
-        "--kernel",
-        choices=["numpy", "pure"],
-        default="numpy",
-        help="Implementación de cada réplica (solo estrategia replicas): numpy (por defecto) o pure",
-        required=False,
-        type=str,
-    )
-    parser_mp.set_defaults(func=handle_multiprocessing)
-
-    # Initialize parser
-    args = parser.parse_args()
-    args.func(args)
-
-
-if __name__ == "__main__":
-    main()
+    ac_boards_data["simulation_history"] = df_sim
+    ac_boards_data["frames_snapshots"] = frames_snapshots
+    ac_boards_data["workers"] = workers_eff
+    ac_boards_data["setup_time"] = setup_time
+    ac_boards_data["compute_time"] = compute_time
+    return df_sim
