@@ -1,4 +1,4 @@
-"""
+
 Paralelización en CPU con `multiprocessing` (paradigm="multiprocessing").
 
 DISEÑO
